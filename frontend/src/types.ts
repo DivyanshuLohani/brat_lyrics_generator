@@ -31,3 +31,11 @@ export interface HistoryItem {
   filename: string;
   created_at: string;
 }
+
+export interface JobStatus {
+  id: string;
+  status: "queued" | "processing" | "completed" | "failed";
+  position: number;
+  result?: string;
+  error?: string;
+}

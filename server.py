@@ -7,7 +7,10 @@ import os
 import shutil
 import sqlite3
 import datetime
-from typing import Optional
+import asyncio
+import uuid
+from typing import Optional, Dict, Any
+from contextlib import asynccontextmanager
 
 # Import our modules
 from generate_lyrics import get_lyrics, parse_time
@@ -15,7 +18,67 @@ from lyrics_fetcher import search_lyrics, get_lyrics_by_id, parse_lrc
 from audio_fetcher import download_audio, trim_audio, cleanup_file, search_videos, download_audio_by_url
 from main import generate_video
 
-app = FastAPI()
+# --- Job Queue Structures ---
+
+
+class Job(BaseModel):
+    id: str
+    status: str  # 'queued', 'processing', 'completed', 'failed'
+    position: int = 0
+    result: Optional[str] = None
+    error: Optional[str] = None
+    created_at: float
+    request_payload: Optional['GenerateRequest'] = None
+
+
+job_queue: asyncio.Queue = asyncio.Queue()
+job_store: Dict[str, Job] = {}
+
+# --- Background Worker ---
+
+
+async def worker():
+    print("Worker started, waiting for jobs...")
+    while True:
+        job_id = await job_queue.get()
+        job = job_store.get(job_id)
+
+        if not job:
+            job_queue.task_done()
+            continue
+
+        try:
+            print(f"Processing job {job_id}")
+            job.status = "processing"
+
+            # Extract request data attached to the job object (we'll attach it dynamically)
+            req = getattr(job, "request_payload", None)
+
+            if req:
+                # Run the synchronous generation in a separate thread
+                video_url = await asyncio.to_thread(process_video_generation, req)
+                job.result = video_url
+                job.status = "completed"
+            else:
+                job.status = "failed"
+                job.error = "No payload found"
+
+        except Exception as e:
+            print(f"Job {job_id} failed: {e}")
+            job.status = "failed"
+            job.error = str(e)
+        finally:
+            job_queue.task_done()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Start worker on startup
+    asyncio.create_task(worker())
+    yield
+    # Clean up if needed
+
+app = FastAPI(lifespan=lifespan)
 
 # Setup Directories and DB
 OUTPUT_DIR = "generated_files"
@@ -99,9 +162,49 @@ async def search_lyrics_endpoint(q: str):
     return results
 
 
+@app.get("/status/{job_id}")
+async def get_job_status(job_id: str):
+    job = job_store.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    # Calculate queue position if queued
+    if job.status == "queued":
+        # This is O(N) but queue likely short.
+        # For production execution, better data structures exist, but this is fine for local.
+        # We assume queue order matches creation time for simplicity.
+        # Actually simplest way: iterate the internal deque if accessible, or just count 'queued' jobs created before this one.
+        # Let's just estimate based on job_store creation times of other queued jobs
+        queued_jobs = [j for j in job_store.values(
+        ) if j.status == 'queued' and j.created_at < job.created_at]
+        job.position = len(queued_jobs) + 1
+    else:
+        job.position = 0
+
+    return job
+
+
 @app.post("/generate")
-async def generate_brat_video(req: GenerateRequest):
-    print(f"Received request: {req}")
+async def queue_generate_request(req: GenerateRequest):
+    job_id = str(uuid.uuid4())
+    import time
+    job = Job(id=job_id, status="queued",
+              created_at=time.time(), request_payload=req)
+
+    # Attach payload dynamically to avoid polluting BaseModel if valid (or just use a wrapper)
+    # Python allows arbitrary attributes on objects but Pydantic might restrict it depending on config.
+    # Let's just store the payload in a parallel dict or just use a helper method.
+    # Let's attach to the job instance.
+    # setattr(job, "request_payload", req) # Now handled in constructor
+
+    job_store[job_id] = job
+    await job_queue.put(job_id)
+
+    return {"job_id": job_id, "status": "queued"}
+
+
+def process_video_generation(req: GenerateRequest):
+    print(f"Starting generation for {req.song}")
 
     # 1. Setup paths with unique timestamp
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -130,7 +233,7 @@ async def generate_brat_video(req: GenerateRequest):
             full_lyrics = get_lyrics(req.artist, req.song)
 
         if not full_lyrics:
-            raise HTTPException(status_code=404, detail="Lyrics not found")
+            raise Exception("Lyrics not found")
 
         sliced_lyrics = []
         for line in full_lyrics:
@@ -142,8 +245,7 @@ async def generate_brat_video(req: GenerateRequest):
                 })
 
         if not sliced_lyrics:
-            raise HTTPException(
-                status_code=400, detail="No lyrics in time range")
+            raise Exception("No lyrics in time range")
 
         import json
         with open(output_json, 'w', encoding='utf-8') as f:
@@ -151,7 +253,7 @@ async def generate_brat_video(req: GenerateRequest):
 
     except Exception as e:
         print(f"Lyrics Error: {e}")
-        raise HTTPException(status_code=500, detail=f"Lyrics Error: {str(e)}")
+        raise e
 
     # 3. Process Audio
     try:
@@ -168,8 +270,7 @@ async def generate_brat_video(req: GenerateRequest):
                 query, temp_filename=f"temp_{timestamp}")
 
         if not temp_audio:
-            raise HTTPException(
-                status_code=500, detail="Audio download failed")
+            raise Exception("Audio download failed")
 
         success = trim_audio(temp_audio, output_audio,
                              start_seconds, end_seconds)
@@ -178,11 +279,11 @@ async def generate_brat_video(req: GenerateRequest):
         cleanup_file(temp_audio)
 
         if not success:
-            raise HTTPException(status_code=500, detail="Audio trim failed")
+            raise Exception("Audio trim failed")
 
     except Exception as e:
         print(f"Audio Error: {e}")
-        raise HTTPException(status_code=500, detail=f"Audio Error: {str(e)}")
+        raise e
 
     # 4. Generate Video
     try:
@@ -196,8 +297,7 @@ async def generate_brat_video(req: GenerateRequest):
         )
     except Exception as e:
         print(f"Video Gen Error: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Video Generation Error: {str(e)}")
+        raise e
 
     # 5. Log to DB
     try:
@@ -210,7 +310,7 @@ async def generate_brat_video(req: GenerateRequest):
     except Exception as e:
         print(f"DB Error: {e}")  # Non-critical
 
-    return {"video_url": f"/generated/{base_name}.mp4"}
+    return f"/generated/{base_name}.mp4"
 
 
 if __name__ == "__main__":

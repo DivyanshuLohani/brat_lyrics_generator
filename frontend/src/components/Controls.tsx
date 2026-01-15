@@ -26,12 +26,16 @@ export default function Controls({ selectedVideo, selectedLyrics, timeRange, onG
         }
     }, [timeRange]);
 
+    const [statusMessage, setStatusMessage] = useState<string>("");
+
     const handleGenerate = async () => {
         if (!selectedVideo || (!selectedLyrics && selectedLyrics !== 'MANUAL')) {
             alert("Please select Audio and Lyrics");
             return;
         }
         setLoading(true);
+        setStatusMessage("Submitting request...");
+
         try {
             const payload = {
                 song: selectedLyrics.name || "Unknown",
@@ -42,15 +46,48 @@ export default function Controls({ selectedVideo, selectedLyrics, timeRange, onG
                 ...params
             };
 
+            // 1. Submit Job
             const res = await axios.post("/generate", payload);
-            if (res.data.video_url) {
-                onGenerate(res.data.video_url);
+            const jobId = res.data.job_id;
+
+            if (!jobId) {
+                throw new Error("No job ID received");
             }
+
+            // 2. Poll for Status
+            const pollInterval = setInterval(async () => {
+                try {
+                    const statusRes = await axios.get(`/status/${jobId}`);
+                    const job = statusRes.data;
+
+                    if (job.status === 'queued') {
+                        setStatusMessage(`Queued (Position: ${job.position})`);
+                    } else if (job.status === 'processing') {
+                        setStatusMessage("Processing Video... (This may take a minute)");
+                    } else if (job.status === 'completed') {
+                        clearInterval(pollInterval);
+                        setStatusMessage("Done!");
+                        setLoading(false);
+                        if (job.result) {
+                            onGenerate(job.result);
+                        }
+                    } else if (job.status === 'failed') {
+                        clearInterval(pollInterval);
+                        setStatusMessage(`Failed: ${job.error}`);
+                        setLoading(false);
+                        alert(`Generation Failed: ${job.error}`);
+                    }
+                } catch (err) {
+                    console.error("Polling error", err);
+                    // Don't clear interval immediately on transient network errors, but maybe count them
+                }
+            }, 2000); // Check every 2 seconds
+
         } catch (e) {
             console.error(e);
-
-        } finally {
             setLoading(false);
+            setStatusMessage("Error submitting request");
+            alert("Failed to submit request");
         }
     };
 
@@ -112,7 +149,7 @@ export default function Controls({ selectedVideo, selectedLyrics, timeRange, onG
                 disabled={loading}
                 className="w-full bg-black text-white p-4 font-bold text-xl hover:scale-[1.01] transition-transform shadow-[5px_5px_0px_0px_rgba(0,0,0,0.5)] active:shadow-none active:translate-x-[5px] active:translate-y-[5px]"
             >
-                {loading ? "GENERATING..." : "GENERATE VIDEO"}
+                {loading ? (statusMessage || "Loading...") : "GENERATE VIDEO"}
             </button>
         </div>
     );

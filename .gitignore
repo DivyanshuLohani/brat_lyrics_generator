@@ -5,3 +5,9 @@ generations.db
 .env
 venv/
 .vscode/
+Hind-Bold.ttf
+Hind-Light.ttf
+Hind-Medium.ttf
+Hind-Regular.ttf
+Hind-SemiBold.ttf
+OFL.txt

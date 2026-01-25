@@ -120,6 +120,7 @@ class GenerateRequest(BaseModel):
     lofi: int = 1
     fontsize: int = 400
     bgcolor: str = "#FFFFFF"
+    textcolor: str = "#000000"
     video_id: Optional[str] = None
     lyrics_id: Optional[int] = None
     manual_lrc: Optional[str] = None
@@ -292,6 +293,7 @@ def process_video_generation(req: GenerateRequest):
             output_path=output_video,
             lyrics_path=output_json,
             bg_color_hex=req.bgcolor,
+            text_color_hex=req.textcolor,
             max_font_size=req.fontsize,
             lofi_factor=req.lofi
         )

@@ -32,8 +32,6 @@ A Python-based tool that generates "brat" aesthetic lyric videos with a Lo-Fi pi
     ```bash
     pip install -r requirements.txt
     ```
-    *Note: You may need to install `fastapi`, `uvicorn`, `requests`, `yt-dlp`, `moviepy`, and `imageio-ffmpeg` if they are not all in your requirements file.*
-
 3.  **FFmpeg**:
     This project uses `moviepy` and `imageio-ffmpeg`. Usually, the binary is handled automatically, but ensure you have a working FFmpeg setup if you encounter issues.
 

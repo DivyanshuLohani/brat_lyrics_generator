@@ -178,14 +178,14 @@ def create_text_image(text, size=(1080, 1920), bg_color=(255, 255, 255), text_co
     return np.array(Image.new('RGB', size, color=bg_color))
 
 
-def create_frame(word_positions, visible_count, size, bg_color, text_color, font, lofi_factor=1):
+def create_frame(word_positions, visible_count, size, bg_color, font, text_color, lofi_factor=1):
     img = Image.new('RGB', size, color=bg_color)
     draw = ImageDraw.Draw(img)
 
     for i in range(min(visible_count, len(word_positions))):
         item = word_positions[i]
         draw.text((item['x'], item['y']), item['text'],
-                  font=font, fill=text_color)
+                  font=font, fill= text_color)
 
     if lofi_factor > 1:
         small_size = (max(1, size[0] // lofi_factor),
@@ -196,7 +196,7 @@ def create_frame(word_positions, visible_count, size, bg_color, text_color, font
     return np.array(img)
 
 
-def generate_video(audio_path, output_path, lyrics_path=None, bg_color_hex="#FFFFFF", max_font_size=400, lofi_factor=1):
+def generate_video(audio_path, output_path, lyrics_path=None, bg_color_hex="#FFFFFF", text_color_hex="#000000", max_font_size=400, lofi_factor=1):
     VIDEO_SIZE = (1080, 1920)
     # Define effective text area
     # 20% top padding, 20% bottom padding -> 60% height usable
@@ -204,7 +204,8 @@ def generate_video(audio_path, output_path, lyrics_path=None, bg_color_hex="#FFF
 
     bg_color = tuple(int(bg_color_hex.lstrip(
         '#')[i:i+2], 16) for i in (0, 2, 4))
-    text_color = (0, 0, 0)
+    text_color = tuple(int(text_color_hex.lstrip(
+        '#')[i:i+2], 16) for i in (0, 2, 4))
 
     # Load audio early to get duration
     try:
@@ -314,7 +315,7 @@ def generate_video(audio_path, output_path, lyrics_path=None, bg_color_hex="#FFF
 
             # Draw frame
             img_array = create_frame(word_positions, len(
-                word_positions), VIDEO_SIZE, bg_color, text_color, font, lofi_factor=lofi_factor)
+                word_positions), VIDEO_SIZE, bg_color,  font, text_color, lofi_factor=lofi_factor)
             clip = ImageClip(img_array).set_duration(
                 duration).set_start(start_time)
             clips.append(clip)

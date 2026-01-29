@@ -43,6 +43,7 @@ def download_audio(query, temp_filename="full_audio"):
 def search_videos(query, limit=5):
     """
     Searches for videos on YouTube and returns metadata.
+    If query is a URL, returns metadata for that specific video.
     """
     ydl_opts = {
         'format': 'bestaudio/best',
@@ -56,18 +57,33 @@ def search_videos(query, limit=5):
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         try:
-            info = ydl.extract_info(f"ytsearch{limit}:{query}", download=False)
-            if 'entries' in info:
-                for entry in info['entries']:
-                    results.append({
-                        'id': entry.get('id'),
-                        'title': entry.get('title'),
-                        'uploader': entry.get('uploader'),
-                        'duration': entry.get('duration'),
-                        'url': entry.get('url') or f"https://www.youtube.com/watch?v={entry.get('id')}",
-                        # heuristic
-                        'thumbnail': f"https://img.youtube.com/vi/{entry.get('id')}/hqdefault.jpg"
-                    })
+            # Check if query is a URL
+            if query.startswith("http://") or query.startswith("https://"):
+                info = ydl.extract_info(query, download=False)
+                # info might be a single video or a playlist (but we set noplaylist)
+                if 'entries' in info:
+                    # It's a playlist or search result, though noplaylist is set
+                    entries = info['entries']
+                else:
+                    # Single video
+                    entries = [info]
+            else:
+                info = ydl.extract_info(
+                    f"ytsearch{limit}:{query}", download=False)
+                entries = info.get('entries', [])
+
+            for entry in entries:
+                if not entry:
+                    continue
+                video_id = entry.get('id')
+                results.append({
+                    'id': video_id,
+                    'title': entry.get('title'),
+                    'uploader': entry.get('uploader'),
+                    'duration': entry.get('duration'),
+                    'url': entry.get('url') or f"https://www.youtube.com/watch?v={video_id}",
+                    'thumbnail': f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg"
+                })
         except Exception as e:
             print(f"Error searching videos: {e}")
 

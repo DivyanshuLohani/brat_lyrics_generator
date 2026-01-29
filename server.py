@@ -1,3 +1,6 @@
+from lyrics_fetcher import search_lyrics, get_lyrics_by_id, parse_lrc
+from main import generate_video
+from audio_fetcher import download_audio, trim_audio, cleanup_file, search_videos, download_audio_by_url
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -12,11 +15,22 @@ import uuid
 from typing import Optional, Dict, Any
 from contextlib import asynccontextmanager
 
+import sys
+
 # Import our modules
 from generate_lyrics import get_lyrics, parse_time
-from lyrics_fetcher import search_lyrics, get_lyrics_by_id, parse_lrc
-from audio_fetcher import download_audio, trim_audio, cleanup_file, search_videos, download_audio_by_url
-from main import generate_video
+
+
+def get_resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
+
 
 # --- Job Queue Structures ---
 
@@ -109,7 +123,14 @@ def init_db():
 init_db()
 
 # Mount generated files
+# Mount generated files
 app.mount("/generated", StaticFiles(directory=OUTPUT_DIR), name="generated")
+app.mount("/assets", StaticFiles(directory="static/assets"), name="assets")
+
+# Mount static files (using resource path)
+static_path = get_resource_path("static")
+if os.path.exists(static_path):
+    app.mount("/static", StaticFiles(directory=static_path), name="static")
 
 
 class GenerateRequest(BaseModel):
@@ -123,19 +144,22 @@ class GenerateRequest(BaseModel):
     video_id: Optional[str] = None
     lyrics_id: Optional[int] = None
     manual_lrc: Optional[str] = None
+    textcolor: str = "#000000"
 
 
 @app.get("/")
 async def read_index():
-    if os.path.exists("static/index.html"):
-        return FileResponse("static/index.html")
+    index_path = get_resource_path("static/index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
     return HTMLResponse("<h1>Brat Generator API is running. Please create static/index.html</h1>")
 
 
 @app.get("/history_page")
 async def read_history_page():
-    if os.path.exists("static/history.html"):
-        return FileResponse("static/history.html")
+    history_path = get_resource_path("static/history.html")
+    if os.path.exists(history_path):
+        return FileResponse(history_path)
     return HTMLResponse("<h1>History page not found. Please create static/history.html</h1>")
 
 
@@ -293,7 +317,8 @@ def process_video_generation(req: GenerateRequest):
             lyrics_path=output_json,
             bg_color_hex=req.bgcolor,
             max_font_size=req.fontsize,
-            lofi_factor=req.lofi
+            lofi_factor=req.lofi,
+            text_color_hex=req.textcolor
         )
     except Exception as e:
         print(f"Video Gen Error: {e}")

@@ -196,7 +196,7 @@ def create_frame(word_positions, visible_count, size, bg_color, text_color, font
     return np.array(img)
 
 
-def generate_video(audio_path, output_path, lyrics_path=None, bg_color_hex="#FFFFFF", max_font_size=400, lofi_factor=1):
+def generate_video(audio_path, output_path, lyrics_path=None, bg_color_hex="#FFFFFF", max_font_size=400, lofi_factor=1, text_color_hex="#000000"):
     VIDEO_SIZE = (1080, 1920)
     # Define effective text area
     # 20% top padding, 20% bottom padding -> 60% height usable
@@ -204,7 +204,8 @@ def generate_video(audio_path, output_path, lyrics_path=None, bg_color_hex="#FFF
 
     bg_color = tuple(int(bg_color_hex.lstrip(
         '#')[i:i+2], 16) for i in (0, 2, 4))
-    text_color = (0, 0, 0)
+    text_color = tuple(int(text_color_hex.lstrip(
+        '#')[i:i+2], 16) for i in (0, 2, 4))
 
     # Load audio early to get duration
     try:

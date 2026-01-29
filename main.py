@@ -196,7 +196,7 @@ def create_frame(word_positions, visible_count, size, bg_color, font, text_color
     return np.array(img)
 
 
-def generate_video(audio_path, output_path, lyrics_path=None, bg_color_hex="#FFFFFF", text_color_hex="#000000", max_font_size=400, lofi_factor=1):
+def generate_video(audio_path, output_path, lyrics_path=None, bg_color_hex="#FFFFFF", max_font_size=400, lofi_factor=1, text_color_hex="#000000"):
     VIDEO_SIZE = (1080, 1920)
     # Define effective text area
     # 20% top padding, 20% bottom padding -> 60% height usable

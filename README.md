@@ -2,7 +2,7 @@
 
 A Python-based tool that generates "brat" aesthetic lyric videos with a Lo-Fi pixelated style. It features a full web interface for searching songs, selecting specific lyric lines, and managing generation history.
 
-![Project Screenshot](https://github.com/user-attachments/assets/4ac393c6-08af-4ee3-ba18-9c0a866eb9dc)
+![Project Screenshot](https://github.com/user-attachments/assets/52a89c3d-be4c-4747-bd11-e7246c5ed33e)
 
 ## Features
 
@@ -32,6 +32,8 @@ A Python-based tool that generates "brat" aesthetic lyric videos with a Lo-Fi pi
     ```bash
     pip install -r requirements.txt
     ```
+    *Note: You may need to install `fastapi`, `uvicorn`, `requests`, `yt-dlp`, `moviepy`, and `imageio-ffmpeg` if they are not all in your requirements file.*
+
 3.  **FFmpeg**:
     This project uses `moviepy` and `imageio-ffmpeg`. Usually, the binary is handled automatically, but ensure you have a working FFmpeg setup if you encounter issues.
 
@@ -71,7 +73,7 @@ A Python-based tool that generates "brat" aesthetic lyric videos with a Lo-Fi pi
 ### Generated Output Example
 
 
-https://github.com/user-attachments/assets/42aee801-294f-421f-823d-6127a6f8460b
+https://github.com/user-attachments/assets/7b92d28a-1607-4100-b2f9-1b48e01c992d
 
 
 *Example of the final lo-fi lyric video.*
@@ -94,9 +96,5 @@ https://github.com/user-attachments/assets/42aee801-294f-421f-823d-6127a6f8460b
 5.  Open a Pull Request
 
 ## License
-
-
-
-
 
 Distributed under the MIT License. See `LICENSE` for more information.

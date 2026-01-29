@@ -178,14 +178,14 @@ def create_text_image(text, size=(1080, 1920), bg_color=(255, 255, 255), text_co
     return np.array(Image.new('RGB', size, color=bg_color))
 
 
-def create_frame(word_positions, visible_count, size, bg_color, font, text_color, lofi_factor=1):
+def create_frame(word_positions, visible_count, size, bg_color, text_color, font, lofi_factor=1):
     img = Image.new('RGB', size, color=bg_color)
     draw = ImageDraw.Draw(img)
 
     for i in range(min(visible_count, len(word_positions))):
         item = word_positions[i]
         draw.text((item['x'], item['y']), item['text'],
-                  font=font, fill= text_color)
+                  font=font, fill=text_color)
 
     if lofi_factor > 1:
         small_size = (max(1, size[0] // lofi_factor),
@@ -315,7 +315,7 @@ def generate_video(audio_path, output_path, lyrics_path=None, bg_color_hex="#FFF
 
             # Draw frame
             img_array = create_frame(word_positions, len(
-                word_positions), VIDEO_SIZE, bg_color,  font, text_color, lofi_factor=lofi_factor)
+                word_positions), VIDEO_SIZE, bg_color, text_color, font, lofi_factor=lofi_factor)
             clip = ImageClip(img_array).set_duration(
                 duration).set_start(start_time)
             clips.append(clip)
@@ -344,8 +344,6 @@ if __name__ == "__main__":
                         help="Path to the output video file")
     parser.add_argument("--bgcolor", default="#FFFFFF",
                         help="Hex code for background color")
-    parser.add_argument("--textcolor", default="#000000",
-                        help="Hex code for background color")
     parser.add_argument("--fontsize", type=int, default=400,
                         help="Maximum font size (starting size)")
     parser.add_argument("--lofi", type=int, default=1,
@@ -354,4 +352,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     generate_video(args.audio, args.output, lyrics_path=args.lyrics,
-                   bg_color_hex=args.bgcolor, text_color_hex=args.textcolor, max_font_size=args.fontsize, lofi_factor=args.lofi)
+                   bg_color_hex=args.bgcolor, max_font_size=args.fontsize, lofi_factor=args.lofi)

@@ -20,17 +20,9 @@ import sys
 # Import our modules
 from generate_lyrics import get_lyrics, parse_time
 
-
-def get_resource_path(relative_path):
-    """ Get absolute path to resource, works for dev and for PyInstaller """
-    try:
-        # PyInstaller creates a temp folder and stores path in _MEIPASS
-        base_path = sys._MEIPASS
-    except Exception:
-        base_path = os.path.abspath(".")
-
-    return os.path.join(base_path, relative_path)
-
+from lyrics_fetcher import search_lyrics, get_lyrics_by_id, parse_lrc
+from audio_fetcher import first_audio, trim_audio, cleanup_file, search_videos, download_audio_by_url
+from main import generate_video
 
 # --- Job Queue Structures ---
 
@@ -97,12 +89,20 @@ app = FastAPI(lifespan=lifespan)
 # Setup Directories and DB
 OUTPUT_DIR = "generated_files"
 DB_NAME = "generations.db"
+MEDIA_DIR = "media"
+TEMP_DIR = "temp"
 
 if not os.path.exists(OUTPUT_DIR):
     os.makedirs(OUTPUT_DIR)
 
 if not os.path.exists("static"):
     os.makedirs("static")
+
+if not os.path.exists(MEDIA_DIR):
+    os.makedirs(MEDIA_DIR)
+
+if not os.path.exists(TEMP_DIR):
+    os.makedirs(TEMP_DIR)
 
 # Initialize DB
 
@@ -113,7 +113,8 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS history
                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
                   song TEXT, 
-                  artist TEXT, 
+                  artist TEXT,
+                  audio TEXT,
                   filename TEXT, 
                   created_at TIMESTAMP)''')
     conn.commit()
@@ -141,6 +142,7 @@ class GenerateRequest(BaseModel):
     lofi: int = 1
     fontsize: int = 400
     bgcolor: str = "#FFFFFF"
+    textcolor: str = "#000000"
     video_id: Optional[str] = None
     lyrics_id: Optional[int] = None
     manual_lrc: Optional[str] = None
@@ -236,8 +238,8 @@ def process_video_generation(req: GenerateRequest):
                         or c in (' ', '-', '_')]).strip()
     base_name = f"{safe_song}_{timestamp}"
 
-    output_json = os.path.join(OUTPUT_DIR, f"{base_name}.json")
-    output_audio = os.path.join(OUTPUT_DIR, f"{base_name}.mp3")
+    output_json = os.path.join(TEMP_DIR, f"{base_name}.json")
+    output_audio = os.path.join(TEMP_DIR, f"{base_name}.mp3")
     output_video = os.path.join(OUTPUT_DIR, f"{base_name}.mp4")
 
     # 2. Process Lyrics
@@ -282,25 +284,35 @@ def process_video_generation(req: GenerateRequest):
     # 3. Process Audio
     try:
         temp_audio = None
-        if req.video_id:
-            # Construct URL from ID (assuming YouTube)
+
+        if not req.video_id:
+            query = f"{req.artist} - {req.song} audio"
+            req.video_id = first_audio(query)
+
+        exists = False
+        try :
+              conn = sqlite3.connect(DB_NAME)
+              c = conn.cursor()
+              c.execute("SELECT EXISTS(SELECT 1 FROM history WHERE audio = ?)", (req.video_id,))
+              exists = bool(c.fetchone()[0])
+              conn.close()
+        except Exception as e:
+              print(f"DB Error: {e}")
+              raise e
+
+        temp_audio_path = os.path.join(MEDIA_DIR, req.video_id)  # type: ignore
+        if not exists:
             video_url = f"https://www.youtube.com/watch?v={req.video_id}"
             temp_audio = download_audio_by_url(
-                video_url, temp_filename=f"temp_{timestamp}")
-        else:
-            # Fallback to search
-            query = f"{req.artist} - {req.song} audio"
-            temp_audio = download_audio(
-                query, temp_filename=f"temp_{timestamp}")
-
+                video_url, temp_filename = temp_audio_path)
+        else :
+            temp_audio = f"{temp_audio_path}.mp3"
+        
         if not temp_audio:
             raise Exception("Audio download failed")
 
         success = trim_audio(temp_audio, output_audio,
                              start_seconds, end_seconds)
-
-        # Cleanup temp
-        cleanup_file(temp_audio)
 
         if not success:
             raise Exception("Audio trim failed")
@@ -316,6 +328,7 @@ def process_video_generation(req: GenerateRequest):
             output_path=output_video,
             lyrics_path=output_json,
             bg_color_hex=req.bgcolor,
+            text_color_hex=req.textcolor,
             max_font_size=req.fontsize,
             lofi_factor=req.lofi,
             text_color_hex=req.textcolor
@@ -328,13 +341,16 @@ def process_video_generation(req: GenerateRequest):
     try:
         conn = sqlite3.connect(DB_NAME)
         c = conn.cursor()
-        c.execute("INSERT INTO history (song, artist, filename, created_at) VALUES (?, ?, ?, ?)",
-                  (req.song, req.artist, f"{base_name}.mp4", datetime.datetime.now()))
+        c.execute("INSERT INTO history (song, artist, audio, filename, created_at) VALUES (?, ?, ?, ?, ?)",
+                  (req.song, req.artist, req.video_id, f"{base_name}.mp4", datetime.datetime.now()))
         conn.commit()
         conn.close()
     except Exception as e:
         print(f"DB Error: {e}")  # Non-critical
 
+    cleanup_file(output_audio)
+    cleanup_file(output_json)
+    
     return f"/generated/{base_name}.mp4"
 
 
